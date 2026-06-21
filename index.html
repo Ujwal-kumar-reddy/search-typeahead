@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise Search</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
+        body { 
+            background: linear-gradient(135deg, #e0e7ff, #ede9fe); 
+            min-height: 100vh; 
+            margin: 0; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            padding-top: 12vh; 
+        }
+        .container { width: 100%; max-width: 600px; position: relative; }
+        h1 { text-align: center; color: #1e1b4b; font-weight: 700; margin-bottom: 2rem; }
+        
+        .input-group { position: relative; }
+        #searchBar {
+            width: 100%;
+            padding: 20px 24px;
+            font-size: 1.2rem;
+            border: 2px solid #fff;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            outline: none;
+            transition: all 0.3s ease;
+        }
+        #searchBar:focus { border-color: #6366f1; background: #fff; }
+
+        .dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            margin-top: 10px;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: none;
+            z-index: 100;
+        }
+        .suggestion-row {
+            padding: 16px 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid #f1f5f9;
+            transition: background 0.15s;
+        }
+        .suggestion-row:last-child { border-bottom: none; }
+        .suggestion-row.focused, .suggestion-row:hover { background: #f8fafc; color: #4f46e5; }
+        .icon { opacity: 0.4; margin-right: 15px; }
+        
+        #consoleOutput {
+            margin-top: 40px;
+            background: #1e293b;
+            color: #38bdf8;
+            padding: 15px 20px;
+            border-radius: 8px;
+            font-family: monospace;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Find anything.</h1>
+        <div class="input-group">
+            <input type="text" id="searchBar" placeholder="Start typing (min 3 chars)..." autocomplete="off">
+            <div class="dropdown" id="dropdownMenu"></div>
+        </div>
+        <div id="consoleOutput"></div>
+    </div>
+
+    <script>
+        const searchBar = document.getElementById('searchBar');
+        const dropdownMenu = document.getElementById('dropdownMenu');
+        const consoleOutput = document.getElementById('consoleOutput');
+        
+        let typingTimeout;
+        let activeResults = [];
+        let cursorIndex = -1;
+
+        searchBar.addEventListener('input', (e) => {
+            clearTimeout(typingTimeout);
+            const query = e.target.value;
+            cursorIndex = -1;
+
+            if (query.trim().length < 3) {
+                dropdownMenu.style.display = 'none';
+                return;
+            }
+
+            typingTimeout = setTimeout(() => fetchAutocomplete(query), 300);
+        });
+
+        async function fetchAutocomplete(searchTerm) {
+            try {
+                const response = await fetch(`/suggest?q=${encodeURIComponent(searchTerm)}`);
+                activeResults = await response.json();
+                
+                if (activeResults.length > 0) {
+                    populateDropdown();
+                    dropdownMenu.style.display = 'block';
+                } else {
+                    dropdownMenu.style.display = 'none';
+                }
+            } catch (error) {
+                console.error("API Error:", error);
+            }
+        }
+
+        function populateDropdown() {
+            dropdownMenu.innerHTML = activeResults.map((val, idx) => `
+                <div class="suggestion-row ${idx === cursorIndex ? 'focused' : ''}" 
+                     data-val="${val}" 
+                     onmousedown="executeSearch('${val}')">
+                    <span class="icon">⚲</span> ${val}
+                </div>
+            `).join('');
+        }
+
+        searchBar.addEventListener('keydown', (e) => {
+            if (dropdownMenu.style.display === 'none' && e.key === 'Enter') {
+                if(searchBar.value) executeSearch(searchBar.value);
+                return;
+            }
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                cursorIndex = (cursorIndex + 1) % activeResults.length;
+                populateDropdown();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                cursorIndex = cursorIndex <= 0 ? activeResults.length - 1 : cursorIndex - 1;
+                populateDropdown();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                const termToSearch = cursorIndex >= 0 ? activeResults[cursorIndex] : searchBar.value;
+                if(termToSearch) executeSearch(termToSearch);
+            }
+        });
+
+        async function executeSearch(finalTerm) {
+            searchBar.value = finalTerm;
+            dropdownMenu.style.display = 'none';
+            searchBar.blur();
+
+            try {
+                await fetch('/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: finalTerm })
+                });
+
+                showSystemLog(`➜ [SENT] "${finalTerm}" queued in memory buffer for batch processing.`);
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        function showSystemLog(msg) {
+            consoleOutput.textContent = msg;
+            consoleOutput.style.opacity = '1';
+            setTimeout(() => {
+                consoleOutput.style.opacity = '0';
+                searchBar.value = '';
+            }, 3000);
+        }
+
+        document.addEventListener('click', (e) => {
+            if (e.target !== searchBar) dropdownMenu.style.display = 'none';
+        });
+    </script>
+</body>
+</html>
