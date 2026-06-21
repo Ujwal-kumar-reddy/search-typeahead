@@ -332,15 +332,17 @@ Add your project demo video link here:
 ```text
 
 
-https://github.com/user-attachments/assets/339f9603-56d6-4dad-8417-8eaf9a56c3a2
+
+
+https://github.com/user-attachments/assets/b43e28a3-8660-4a84-90b2-872b876ff611
+
+
 
 
 ```
 
 ---
 
-## Author
 
-Developed as a Distributed Systems and Backend Engineering Project focusing on scalability, caching strategies, and high-performance search architectures.
 
 
